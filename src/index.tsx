@@ -181,6 +181,7 @@ export interface Config {
   Markdown: boolean // TODO
   customMarkdown: string // TODO
   UseMarkdownPlatform: string[]
+  filterVocabulary: string[]
 
   Forward_Mode: string
   Original_Target: Original_Target[]
@@ -234,6 +235,7 @@ export const Config: Schema<Config> = Schema.intersect([
 
   Schema.object({
     Message_Wrapping_Setting: Schema.boolean().description('是否自动换行消息原文与消息开头').default(false),
+    filterVocabulary: Schema.array(String).description('过滤词列表').role('table'),
     Markdown: Schema.boolean().description('是否在支持Markdown的平台上使用Markdown修饰（优先度低于KOOK卡片消息）').default(false),
     At_Setting: Schema.boolean().description('是否自动将@用户ID转化为名称').default(false).hidden()
   }),
@@ -409,8 +411,9 @@ export function apply(ctx: Context,cfg:Config) {
   ctx.on('message',async (session) => {
 
     async function Message_Forwarding(Original_Guild : string, Original_Platform : string, Original_BotID: string, Target_Guild : string, Target_Platform : string, Target_BotID: string) {
-
-
+      if (cfg.filterVocabulary.some(word => session.content.includes(word))){
+        return
+      }
       const receive_message_id = session.messageId
       let send_message_id
 
@@ -424,8 +427,8 @@ export function apply(ctx: Context,cfg:Config) {
             if (cfg.Nickname_Setting === false){
               userName = session.event.member.nick
               if (!userName){
-                if (typeof session.bot.getUser === 'function'){
-                  userName = (await session.bot.getUser(session.userId)).nick
+                if (typeof session.bot.getGuildMember === 'function'){
+                  userName = (await session.bot.getGuildMember(session.guildId, session.userId)).nick
                 }
               }
             } else if (cfg.Nickname_Setting === true){
@@ -445,6 +448,42 @@ export function apply(ctx: Context,cfg:Config) {
           }
 
           let message
+
+          let content: string = ''
+          if (session.platform === 'kook') {
+            try {
+              const parsed = JSON.parse(session.event._data.content)
+              if (!(typeof parsed === 'object')) {
+                content = parsed
+              } else {
+                const contentElement = []
+                parsed[0].modules.forEach(module => {
+                  console.log(module)
+                  switch (module.type) {
+                    case 'section': {
+                      contentElement.push(module.text.content)
+                      break
+                    }
+                    case 'container': {
+                      contentElement.push(<img src={module.elements[0].src} alt=''/>)
+                      break
+                    }
+                  }
+                })
+                content = contentElement.join('')
+              }
+            } catch (e) {
+              content = session.content
+            }
+          } else {
+            content = session.content
+          }
+          /**
+           * @param {string} content
+           * 在我对kook适配器测试后发现，kook适配器无法正常处理图文混合消息（https://forum.koishi.xyz/t/topic/8363）
+           * 因此使用content变量，并在此对session.platform进行检测
+           */
+
           const modules: object[] = []
           if (cfg.KOOK_Use_CardMessage === true && Target_Platform === 'kook'){
 
@@ -497,11 +536,11 @@ export function apply(ctx: Context,cfg:Config) {
                   }
 
                   if (cfg.UserName_Setting === false && cfg.ChannelName_Setting === false){
-                    messageInfo.push(`${session.content}`)
+                    messageInfo.push(`${content}`)
                   } else if (cfg.Message_Wrapping_Setting === false){
-                    messageInfo.push(`: ${session.content}`)
+                    messageInfo.push(`: ${content}`)
                   } else if (cfg.Message_Wrapping_Setting === true){
-                    messageInfo.push(`: &#10;${session.content}`)
+                    messageInfo.push(`: &#10;${content}`)
                   }
                   message = messageInfo.join('')
                   send_message_id = (await ctx.bots[`${Target_Platform}:${Target_BotID}`].sendMessage(Target_Guild,message)).toString()
@@ -549,8 +588,7 @@ export function apply(ctx: Context,cfg:Config) {
               if (ChannelName || userName){
                 messageInfo.push('&#10;---&#10;')
               }
-              messageInfo.push('> ' + session.content.replace(/\n/g, '\n> '))
-              console.log(messageInfo)
+              messageInfo.push('> ' + content.replace(/\n/g, '\n> '))
             } else {
               if (ChannelName) {
                 messageInfo.push(`${cfg.ChannelName_Package_Format[0]}${ChannelName}${cfg.ChannelName_Package_Format[1]}`)
@@ -559,11 +597,11 @@ export function apply(ctx: Context,cfg:Config) {
                 messageInfo.push(`${cfg.UserName_Package_Format[0]}${userName}${cfg.UserName_Package_Format[1]}`)
               }
               if (cfg.UserName_Setting === false && cfg.ChannelName_Setting === false){
-                messageInfo.push(`${session.content}`)
+                messageInfo.push(`${content}`)
               } else if (cfg.Message_Wrapping_Setting === false){
-                messageInfo.push(`: ${session.content}`)
+                messageInfo.push(`: ${content}`)
               } else if (cfg.Message_Wrapping_Setting === true){
-                messageInfo.push(`: &#10;${session.content}`)
+                messageInfo.push(`: &#10;${content}`)
               }
             }
 
@@ -645,114 +683,111 @@ export function apply(ctx: Context,cfg:Config) {
 
     }
 
-
-    if (cfg.Forward_Mode === '单向转发'){
-      try {
-        for (let i = 0; i < cfg.Original_Target.length; i++){
-          const item = cfg.Original_Target[i]
-          Message_Forwarding(
-            item.Original_Guild,
-            item.Original_Platform,
-            item.Original_BotID,
-            item.Target_Guild,
-            item.Target_Platform,
-            item.Target_BotID
-          )
+    switch (cfg.Forward_Mode) {
+      case '单向转发':
+        try {
+          for (let i = 0; i < cfg.Original_Target.length; i++){
+            const item = cfg.Original_Target[i]
+            Message_Forwarding(
+              item.Original_Guild,
+              item.Original_Platform,
+              item.Original_BotID,
+              item.Target_Guild,
+              item.Target_Platform,
+              item.Target_BotID
+            )
+          }
+        } catch (error) {
+          ctx.logger.error(`单向转发模式错误：${error}`)
         }
-      } catch (error) {
-        ctx.logger.error(`单向转发模式错误：${error}`)
-      }
-    } else if (cfg.Forward_Mode === '双向转发'){
-      try {
-        for (let i = 0; i < cfg.Original_Target.length; i++){
-          const item = cfg.Original_Target[i]
-          Message_Forwarding(
-            item.Original_Guild,
-            item.Original_Platform,
-            item.Original_BotID,
-            item.Target_Guild,
-            item.Target_Platform,
-            item.Target_BotID
-          )
-          Message_Forwarding(
-            item.Target_Guild,
-            item.Target_Platform,
-            item.Target_BotID,
-            item.Original_Guild,
-            item.Original_Platform,
-            item.Original_BotID
-          )
+        break
+      case '双向转发':
+        try {
+          for (let i = 0; i < cfg.Original_Target.length; i++){
+            const item = cfg.Original_Target[i]
+            Message_Forwarding(
+              item.Original_Guild,
+              item.Original_Platform,
+              item.Original_BotID,
+              item.Target_Guild,
+              item.Target_Platform,
+              item.Target_BotID
+            )
+            Message_Forwarding(
+              item.Target_Guild,
+              item.Target_Platform,
+              item.Target_BotID,
+              item.Original_Guild,
+              item.Original_Platform,
+              item.Original_BotID
+            )
+          }
+        } catch (error) {
+          ctx.logger.error(`双向转发模式错误：${error}`)
         }
-      } catch (error) {
-        ctx.logger.error(`双向转发模式错误：${error}`)
-      }
-    } else if (cfg.Forward_Mode === '群聊互联！'){
-      try {
-        const existingItems = []
-        function itemExists(item, array) {
-          return array.some(
-            existingItem =>
-              JSON.stringify(existingItem) === JSON.stringify(item)
-          )
-        }
-        for (let f = 0; f < cfg.OT_EY.length; f++) {
-          for (let i = 0; i < cfg.OT_EY[f].Original_Target.length; i++) {
-            for (let o = i + 1; o < cfg.OT_EY[f].Original_Target.length; o++) {
-              const item_i = cfg.OT_EY[f].Original_Target[i]
-              const item_o = cfg.OT_EY[f].Original_Target[o]
-              const item_array = {
-                Original_Guild: item_i.Original_Guild,
-                Original_Platform: item_i.Original_Platform,
-                Original_BotID: item_i.Original_BotID,
-                Target_Guild: item_o.Original_Guild,
-                Target_Platform: item_o.Original_Platform,
-                Target_BotID: item_o.Original_BotID
-              }
-              const reverse_item_array = {
-                Original_Guild: item_o.Original_Guild,
-                Original_Platform: item_o.Original_Platform,
-                Original_BotID: item_o.Original_BotID,
-                Target_Guild: item_i.Original_Guild,
-                Target_Platform: item_i.Original_Platform,
-                Target_BotID: item_i.Original_BotID
-              }
-              if (!itemExists(item_array, existingItems)) {
-                existingItems.push(item_array)
-                Message_Forwarding(
-                  item_i.Original_Guild,
-                  item_i.Original_Platform,
-                  item_i.Original_BotID,
-                  item_o.Original_Guild,
-                  item_o.Original_Platform,
-                  item_o.Original_BotID
-                )
-              }
-              if (!itemExists(reverse_item_array, existingItems)) {
-                existingItems.push(reverse_item_array)
-                Message_Forwarding(
-                  item_o.Original_Guild,
-                  item_o.Original_Platform,
-                  item_o.Original_BotID,
-                  item_i.Original_Guild,
-                  item_i.Original_Platform,
-                  item_i.Original_BotID
-                )
+        break
+      case '群聊互联！':
+        try {
+          const existingItems = []
+          function itemExists(item, array) {
+            return array.some(
+              existingItem =>
+                JSON.stringify(existingItem) === JSON.stringify(item)
+            )
+          }
+          for (let f = 0; f < cfg.OT_EY.length; f++) {
+            for (let i = 0; i < cfg.OT_EY[f].Original_Target.length; i++) {
+              for (let o = i + 1; o < cfg.OT_EY[f].Original_Target.length; o++) {
+                const item_i = cfg.OT_EY[f].Original_Target[i]
+                const item_o = cfg.OT_EY[f].Original_Target[o]
+                const item_array = {
+                  Original_Guild: item_i.Original_Guild,
+                  Original_Platform: item_i.Original_Platform,
+                  Original_BotID: item_i.Original_BotID,
+                  Target_Guild: item_o.Original_Guild,
+                  Target_Platform: item_o.Original_Platform,
+                  Target_BotID: item_o.Original_BotID
+                }
+                const reverse_item_array = {
+                  Original_Guild: item_o.Original_Guild,
+                  Original_Platform: item_o.Original_Platform,
+                  Original_BotID: item_o.Original_BotID,
+                  Target_Guild: item_i.Original_Guild,
+                  Target_Platform: item_i.Original_Platform,
+                  Target_BotID: item_i.Original_BotID
+                }
+                if (!itemExists(item_array, existingItems)) {
+                  existingItems.push(item_array)
+                  Message_Forwarding(
+                    item_i.Original_Guild,
+                    item_i.Original_Platform,
+                    item_i.Original_BotID,
+                    item_o.Original_Guild,
+                    item_o.Original_Platform,
+                    item_o.Original_BotID
+                  )
+                }
+                if (!itemExists(reverse_item_array, existingItems)) {
+                  existingItems.push(reverse_item_array)
+                  Message_Forwarding(
+                    item_o.Original_Guild,
+                    item_o.Original_Platform,
+                    item_o.Original_BotID,
+                    item_i.Original_Guild,
+                    item_i.Original_Platform,
+                    item_i.Original_BotID
+                  )
+                }
               }
             }
           }
+        } catch (error) {
+          ctx.logger.error(`群聊互联模式错误：${error}`)
         }
-      } catch (error) {
-        ctx.logger.error(`群聊互联模式错误：${error}`)
-      }
+        break
     }
 
-
-
   })
-
-
-
-
 
 }
 
