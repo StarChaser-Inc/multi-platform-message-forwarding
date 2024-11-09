@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-multi-platform-message-forwarding",
   "description": "多平台消息转发",
-  "version": "3.3.1",
+  "version": "4.0.0-alpha.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -9,7 +9,7 @@
     "dist",
     "src"
   ],
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "homepage": "https://forum.koishi.xyz/t/topic/7909",
   "repository": {
     "type": "git",
@@ -30,5 +30,11 @@
   },
   "koishi": {
     "browser": true
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.14.0",
+    "eslint": "9.x",
+    "globals": "^15.12.0",
+    "typescript-eslint": "^8.13.0"
   }
 }
