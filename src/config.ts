@@ -60,6 +60,15 @@ export const Config: Schema<Config> = Schema.intersect([
     }),
     Schema.object({})
   ]),
+  Schema.union([
+    Schema.object({
+      enableChannelName: Schema.const(true).required(),
+      channelNamePackageFormat: Schema.tuple([String, String])
+        .description('请输入名称左右两旁的封装符号')
+        .default(['[', ']'])
+    }),
+    Schema.object({})
+  ]),
 
   Schema.object({
     forwardMode: Schema.union(['单向转发', '双向转发', '群聊互联！'])
@@ -111,9 +120,6 @@ export const Config: Schema<Config> = Schema.intersect([
               originalChannelId: Schema.string().description('群聊/频道ID').required(),
               originalPlatform: Schema.string().description('平台').required(),
               originalBotId: Schema.string().description('机器人ID').required(),
-              targetChannelId: Schema.string().description('群聊/频道ID').required(),
-              targetPlatform: Schema.string().description('平台').required(),
-              targetBotId: Schema.string().description('机器人ID').required(),
               note: Schema.string().description('备注').default('')
             })
           )

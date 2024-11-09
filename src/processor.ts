@@ -45,33 +45,20 @@ export class Processor {
    * @returns 是否需要处理该消息
    */
   public filter(session: Session): boolean {
-    if (session.channelId !== this._processInfo.originalChannelId) {
-      return false
-    } // 忽略非指定频道的消息
-    if (session.platform !== this._processInfo.originalPlatform) {
-      return false
-    } // 忽略非指定平台的消息
-    if (session.userId === this._processInfo.originalBotId) {
-      return false
-    } // 忽略机器人自身的消息
-    if (session.userId === this._processInfo.targetBotId) {
-      return false
-    } // 忽略目标机器人的消息
-    if (session.content === undefined || session.content === null) {
-      return false
-    } // 忽略空消息
     if (
-      this._cfg.filterVocabularyWhiteOrBlackList &&
-      this._cfg.filterVocabularyList.some(word => session.content.includes(word))
-    ) {
-      return true
-    } // 白名单过滤判断
-    if (
-      !this._cfg.filterVocabularyWhiteOrBlackList &&
-      !this._cfg.filterVocabularyList.some(word => session.content.includes(word))
+      session.channelId !== this._processInfo.originalChannelId ||
+      session.platform !== this._processInfo.originalPlatform ||
+      session.userId === this._processInfo.originalBotId ||
+      session.userId === this._processInfo.targetBotId ||
+      session.content === undefined ||
+      session.content === null ||
+      (this._cfg.filterVocabularyWhiteOrBlackList &&
+        !this._cfg.filterVocabularyList.some(word => session.content.includes(word))) ||
+      (!this._cfg.filterVocabularyWhiteOrBlackList &&
+        this._cfg.filterVocabularyList.some(word => session.content.includes(word)))
     ) {
       return false
-    } // 黑名单过滤判断
+    }
     return true
   }
 
@@ -84,9 +71,10 @@ export class Processor {
     const headers: string[] = []
     if (this._cfg.enableChannelName) {
       // 频道名称
+      const channel = await session.bot.getChannel(session.channelId)
       headers.push(
         this._cfg.channelNamePackageFormat[0],
-        session.event.channel.name,
+        channel.name,
         this._cfg.channelNamePackageFormat[1]
       )
     }
