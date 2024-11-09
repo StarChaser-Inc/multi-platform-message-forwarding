@@ -1,8 +1,10 @@
 import { Context } from 'koishi'
 import { Config } from './config'
 import { Processor } from './processor'
+import {} from '@koishijs/cache'
 
 export * from './config'
+
 
 export function apply(ctx: Context, cfg: Config): void {
   switch (cfg.forwardMode) {

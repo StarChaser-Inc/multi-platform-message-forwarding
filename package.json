@@ -10,13 +10,13 @@
     "src"
   ],
   "license": "GPL-3.0-only",
-  "homepage": "https://forum.koishi.xyz/t/topic/7909",
+  "homepage": "https://github.com/StarChaser-Inc/multi-platform-message-forwarding",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ACAlexChen/multi-platform-message-forwarding.git"
+    "url": "git+https://github.com/StarChaser-Inc/multi-platform-message-forwarding.git"
   },
   "bugs": {
-    "url": "https://github.com/ACAlexChen/multi-platform-message-forwarding/issues"
+    "url": "https://github.com/StarChaser-Inc/multi-platform-message-forwarding/issues"
   },
   "keywords": [
     "chatbot",
